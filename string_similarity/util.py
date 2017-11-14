@@ -65,64 +65,6 @@ def ngram_similarity(texts1, texts2, n):
         outputs.append([similarity])
     return np.array(outputs)
 
-def load_patten(filename):
-    pingan_patten = []
-    with open(filename) as f:
-        for line in f:
-            line = line.strip().decode('utf-8')
-            line_list = line.split(' ')
-            pingan_patten.append(line_list)
-    return pingan_patten
-
-def info_ex(sentence,pattens):
-    pattern = ''
-    for p in pattens:
-        if p[1] in sentence:
-            pattern = p[1]
-            break
-    return pattern
-
-def pattern_sim(text1,text2,pattens):
-    features = []
-    for text1_, text2_ in zip(text1,text2):
-        text1_context = info_ex(text1_, pattens)
-        text2_context = info_ex(text2_, pattens)
-        if (text1_context == text2_context) and text1_context != '':
-            features.append([1])
-        else:
-            features.append([0])
-    return features
-
-def load_dict(filename):
-    dict_set = set()
-    with open(filename) as f:
-        lines = f.readlines()
-        for line in lines:
-            dict_set.add(unicode(line.strip(),'utf-8'))
-    return dict_set
-
-def get_entitys(sentence,entitys):
-    entitys_set = set()
-    for entity in entitys:
-        if entity in sentence:
-            entitys_set.add(entity)
-    return entitys_set
-
-def entity_sim(text1, text2, entitys_map):
-    result = []
-    for text1_, text2_ in zip(text1, text2):
-        features = []
-        text1_entitys = get_entitys(text1_,entitys_map['address'])
-        text2_entitys = get_entitys(text2_,entitys_map['address'])
-        features.append(len(text1_entitys & text2_entitys))
-
-        text1_entitys = get_entitys(text1_, entitys_map['insurance'])
-        text2_entitys = get_entitys(text2_, entitys_map['insurance'])
-        features.append(len(text1_entitys & text2_entitys))
-
-        result.append(features)
-    return np.array(result)
-
 def get_number_sim(text1, text2):
     number = re.compile(ur'\d+[wk百万亿]*')
     cn_number = re.compile(u'[一二三四五六七八九十百千万亿个]{1,}')
@@ -190,5 +132,3 @@ def convertChineseDigitsToArabic(chinese_digits, encoding="utf-8"):
     result = result + tmp
     result = result + hnd_mln
     return unicode(str(result),'utf-8')
-
-print get_number_sim([u'能不能贷六十万'],[u'能不能贷60w'])

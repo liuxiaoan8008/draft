@@ -10,8 +10,8 @@ import logging
 from optparse import OptionParser
 
 from string_similarity.topic_model import TopicModel
-from string_similarity.util import edit_distance, hamming_distance, ngram_similarity, \
-    lcs, load_dict, pattern_sim, load_patten, entity_sim
+from string_similarity.intent_model import IntentModel
+from string_similarity.util import edit_distance, hamming_distance, ngram_similarity, lcs
 
 import jieba
 import numpy as np
@@ -24,11 +24,8 @@ from xgboost import XGBClassifier
 
 MODEL_FILENAME = 'text_similarity_xgboost_model.pkl'
 
-dict_map_set = {}
-dict_pattern = []
 
-
-def feature_extraction(x1, x2, mode, filepath):
+def feature_extraction(x1, x2, mode, filepath, dictpath):
     global dict_map_set
     global dict_pattern
 
@@ -48,12 +45,23 @@ def feature_extraction(x1, x2, mode, filepath):
         topic_model_training_data.extend(seg_x2)
         feature_extraction.topic_model.build(topic_model_training_data)
 
+    if not hasattr(feature_extraction, "intent_model"):
+        feature_extraction.intent_model = IntentModel(dictpath)
+
     extraction = feature_extraction.topic_model.similarity(seg_x1, seg_x2)
     extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
     extraction = np.concatenate((extraction, edit_distance(x1, x2)), axis=1)
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
-    extraction = np.concatenate((extraction, pattern_sim(x1, x2, dict_pattern)), axis=1)
-    extraction = np.concatenate((extraction, entity_sim(x1, x2, dict_map_set)), axis=1)
+
+    intent_sim,pattern_x1,pattern_x2 = feature_extraction.intent_model.similarity(x1, x2)
+    extraction = np.concatenate((extraction, intent_sim), axis=1)
+
+    # level two
+    pattern_sim = feature_extraction.intent_model.pattern_sim(pattern_x1, pattern_x2)
+    extraction = np.concatenate((extraction,pattern_sim),axis=1)
+    extraction = np.concatenate((extraction, edit_distance(pattern_x1, pattern_x2)), axis=1)
+    extraction = np.concatenate((extraction, lcs(pattern_x1, pattern_x2)), axis=1)
+
     return extraction
 
 
@@ -66,6 +74,7 @@ if __name__ == '__main__':
     parser.add_option("-d", "--data", dest="data", metavar="FILE", help="training/testing/candidate data")
     parser.add_option("-f", "--filepath", dest="filepath", metavar="FILE", help="model filepath")
     parser.add_option("-m", "--mode", dest="mode", help="interaction mode: train, test, try")
+    parser.add_option("--dict", "--dictpath", dest="dictpath", metavar="FILE", help="dictionary filepath")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -88,14 +97,6 @@ if __name__ == '__main__':
     if not os.path.exists(options.filepath):
         os.makedirs(options.filepath)
 
-    # add_dict
-    global dict_map_set
-    global dict_pattern
-    dict_map_set['address'] = load_dict('./data/fake_address_entity.csv')
-    dict_map_set['insurance'] = load_dict('./data/fake_safename_entity.csv')
-
-    dict_pattern = load_patten('./data/fake_patten.csv')
-
     if options.mode == "train" or options.mode == "test":
         with open(options.data, 'rb') as csvfile:
             spamreader = csv.reader(csvfile, delimiter='\t')
@@ -109,7 +110,7 @@ if __name__ == '__main__':
                 x2.append(unicode(row[1], 'utf8'))
                 y.append(int(row[2]))
 
-            extraction = feature_extraction(x1, x2, options.mode, options.filepath)
+            extraction = feature_extraction(x1, x2, options.mode, options.filepath, options.dictpath)
             if options.mode == "train":
                 clf = Pipeline([
                     ('preprocess', preprocessing.StandardScaler()),
@@ -137,7 +138,7 @@ if __name__ == '__main__':
                 logging.info("please input a question: ")
                 question = unicode(raw_input(), 'utf8')
 
-                extraction = feature_extraction([question], x, options.mode, options.filepath)
+                extraction = feature_extraction([question], x, options.mode, options.filepath, options.dictpath)
                 clf = joblib.load(options.filepath + '/' + MODEL_FILENAME)
                 y_predict = clf.predict_proba(extraction)
 
