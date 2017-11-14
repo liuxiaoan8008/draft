@@ -53,6 +53,8 @@ def feature_extraction(x1, x2, mode, filepath, dictpath):
     extraction = np.concatenate((extraction, edit_distance(x1, x2)), axis=1)
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
 
+    number_sim = feature_extraction.intent_model.number_sim(x1, x2)
+    extraction = np.concatenate((extraction, number_sim), axis=1)
     intent_sim,pattern_x1,pattern_x2 = feature_extraction.intent_model.similarity(x1, x2)
     extraction = np.concatenate((extraction, intent_sim), axis=1)
 
