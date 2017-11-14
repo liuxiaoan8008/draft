@@ -10,7 +10,8 @@ import logging
 from optparse import OptionParser
 
 from string_similarity.topic_model import TopicModel
-from string_similarity.util import edit_distance, hamming_distance, ngram_similarity, lcs
+from string_similarity.util import edit_distance, hamming_distance, ngram_similarity, \
+    lcs, load_dict, pattern_sim, load_patten, entity_sim
 
 import jieba
 import numpy as np
@@ -21,9 +22,15 @@ from sklearn.externals import joblib
 
 from xgboost import XGBClassifier
 
-MODEL_FILENAME='text_similarity_xgboost_model.pkl'
+MODEL_FILENAME = 'text_similarity_xgboost_model.pkl'
+
+dict_map_set = {}
+dict_pattern = []
+
 
 def feature_extraction(x1, x2, mode, filepath):
+    global dict_map_set
+    global dict_pattern
 
     seg_x1 = []
     for x in x1:
@@ -45,7 +52,10 @@ def feature_extraction(x1, x2, mode, filepath):
     extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
     extraction = np.concatenate((extraction, edit_distance(x1, x2)), axis=1)
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
+    extraction = np.concatenate((extraction, pattern_sim(x1, x2, dict_pattern)), axis=1)
+    extraction = np.concatenate((extraction, entity_sim(x1, x2, dict_map_set)), axis=1)
     return extraction
+
 
 if __name__ == '__main__':
 
@@ -53,8 +63,8 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format=FORMAT)
 
     parser = OptionParser()
-    parser.add_option("-d", "--data", dest = "data", metavar = "FILE", help = "training/testing/candidate data")
-    parser.add_option("-f", "--filepath", dest = "filepath", metavar = "FILE", help = "model filepath")
+    parser.add_option("-d", "--data", dest="data", metavar="FILE", help="training/testing/candidate data")
+    parser.add_option("-f", "--filepath", dest="filepath", metavar="FILE", help="model filepath")
     parser.add_option("-m", "--mode", dest="mode", help="interaction mode: train, test, try")
 
     if len(sys.argv) == 1:
@@ -78,6 +88,14 @@ if __name__ == '__main__':
     if not os.path.exists(options.filepath):
         os.makedirs(options.filepath)
 
+    # add_dict
+    global dict_map_set
+    global dict_pattern
+    dict_map_set['address'] = load_dict('./data/fake_address_entity.csv')
+    dict_map_set['insurance'] = load_dict('./data/fake_safename_entity.csv')
+
+    dict_pattern = load_patten('./data/fake_patten.csv')
+
     if options.mode == "train" or options.mode == "test":
         with open(options.data, 'rb') as csvfile:
             spamreader = csv.reader(csvfile, delimiter='\t')
@@ -86,7 +104,7 @@ if __name__ == '__main__':
             x2 = []
             y = []
             for row in spamreader:
-                assert len(row) == 3, "invalid row: " + row
+                assert len(row) == 3, "invalid row: " + str(row)
                 x1.append(unicode(row[0], 'utf8'))
                 x2.append(unicode(row[1], 'utf8'))
                 y.append(int(row[2]))
@@ -94,9 +112,9 @@ if __name__ == '__main__':
             extraction = feature_extraction(x1, x2, options.mode, options.filepath)
             if options.mode == "train":
                 clf = Pipeline([
-                          ('preprocess', preprocessing.StandardScaler()),
-                          ('classifier', XGBClassifier(max_depth=7, min_child_weight=0.5, objective="binary:logistic"))
-                      ])
+                    ('preprocess', preprocessing.StandardScaler()),
+                    ('classifier', XGBClassifier(max_depth=7, min_child_weight=0.5, objective="binary:logistic"))
+                ])
                 clf.fit(extraction, y)
                 joblib.dump(clf, options.filepath + '/' + MODEL_FILENAME)
             elif options.mode == "test":
@@ -122,7 +140,7 @@ if __name__ == '__main__':
                 extraction = feature_extraction([question], x, options.mode, options.filepath)
                 clf = joblib.load(options.filepath + '/' + MODEL_FILENAME)
                 y_predict = clf.predict_proba(extraction)
-                
+
                 x_cand = []
                 for i in xrange(len(y_predict)):
                     x_cand.append((x[i], y_predict[i][1]))
