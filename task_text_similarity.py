@@ -25,9 +25,7 @@ from xgboost import XGBClassifier
 MODEL_FILENAME = 'text_similarity_xgboost_model.pkl'
 
 
-def feature_extraction(x1, x2, mode, filepath, dictpath):
-    global dict_map_set
-    global dict_pattern
+def feature_extraction(x1, x2, mode, filepath):
 
     seg_x1 = []
     for x in x1:
@@ -46,23 +44,17 @@ def feature_extraction(x1, x2, mode, filepath, dictpath):
         feature_extraction.topic_model.build(topic_model_training_data)
 
     if not hasattr(feature_extraction, "intent_model"):
-        feature_extraction.intent_model = IntentModel(dictpath)
+        feature_extraction.intent_model = IntentModel()
 
     extraction = feature_extraction.topic_model.similarity(seg_x1, seg_x2)
     extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
     extraction = np.concatenate((extraction, edit_distance(x1, x2)), axis=1)
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
 
+    intent_sim = feature_extraction.intent_model.similarity(x1, x2)
+    extraction = np.concatenate((extraction, intent_sim), axis=1)
     number_sim = feature_extraction.intent_model.number_sim(x1, x2)
     extraction = np.concatenate((extraction, number_sim), axis=1)
-    intent_sim,pattern_x1,pattern_x2 = feature_extraction.intent_model.similarity(x1, x2)
-    extraction = np.concatenate((extraction, intent_sim), axis=1)
-
-    # level two
-    pattern_sim = feature_extraction.intent_model.pattern_sim(pattern_x1, pattern_x2)
-    extraction = np.concatenate((extraction,pattern_sim),axis=1)
-    extraction = np.concatenate((extraction, edit_distance(pattern_x1, pattern_x2)), axis=1)
-    extraction = np.concatenate((extraction, lcs(pattern_x1, pattern_x2)), axis=1)
 
     return extraction
 
@@ -76,7 +68,6 @@ if __name__ == '__main__':
     parser.add_option("-d", "--data", dest="data", metavar="FILE", help="training/testing/candidate data")
     parser.add_option("-f", "--filepath", dest="filepath", metavar="FILE", help="model filepath")
     parser.add_option("-m", "--mode", dest="mode", help="interaction mode: train, test, try")
-    parser.add_option("--dict", "--dictpath", dest="dictpath", metavar="FILE", help="dictionary filepath")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -112,7 +103,7 @@ if __name__ == '__main__':
                 x2.append(unicode(row[1], 'utf8'))
                 y.append(int(row[2]))
 
-            extraction = feature_extraction(x1, x2, options.mode, options.filepath, options.dictpath)
+            extraction = feature_extraction(x1, x2, options.mode, options.filepath)
             if options.mode == "train":
                 clf = Pipeline([
                     ('preprocess', preprocessing.StandardScaler()),
@@ -140,7 +131,7 @@ if __name__ == '__main__':
                 logging.info("please input a question: ")
                 question = unicode(raw_input(), 'utf8')
 
-                extraction = feature_extraction([question], x, options.mode, options.filepath, options.dictpath)
+                extraction = feature_extraction([question], x, options.mode, options.filepath)
                 clf = joblib.load(options.filepath + '/' + MODEL_FILENAME)
                 y_predict = clf.predict_proba(extraction)
 
@@ -151,3 +142,4 @@ if __name__ == '__main__':
                 x_cand_sorted = sorted(x_cand, key=lambda k: 0 - k[1])
                 for k in x_cand_sorted:
                     logging.info(k[0].encode('utf8'))
+

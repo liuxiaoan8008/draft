@@ -8,108 +8,10 @@ import re
 import numpy as np
 
 class IntentModel(object):
-    def __init__(self, dict_dir):
-        self.dict_dir = dict_dir
 
-        self.dict_path_address = self.dict_dir + '/fake_address_entity.csv'
-        self.dict_path_insurance_name = self.dict_dir + '/fake_insurance_entity.csv'
+    DEFAULT_DICT_PATH = './data/dict'
 
-        self.dict_path_pattern = self.dict_dir + '/fake_pattern.csv'
-
-        self.dict_address = None
-        self.dict_insurance_name = None
-
-        # level two
-        self.dict_pattern = None
-
-        if os.path.exists(self.dict_dir):
-            logging.info('loading intent dicts...')
-
-            if os.path.exists(self.dict_path_address):
-                logging.info('loading address entity dictionary...')
-                self.dict_address = self.load_dict(self.dict_path_address)
-
-            if os.path.exists(self.dict_path_insurance_name):
-                logging.info('loading insurance_name entity dictionary...')
-                self.dict_insurance_name = self.load_dict(self.dict_path_insurance_name)
-
-            if os.path.exists(self.dict_path_pattern):
-                logging.info('loading insurance_name entity dictionary...')
-                self.dict_pattern = self.load_patten(self.dict_path_pattern)
-
-    def similarity(self,texts1, texts2, dicts = ['address','insurance_name']):
-        assert dicts is not None and len(dicts) != 0, "empty dicts"
-        assert len(texts1) == len(texts2) or len(texts1) == 1, "invalid"
-
-        features = []
-
-        pattern_texts1 = []
-        pattern_texts2 = []
-
-        for text1, text2 in zip(texts1, texts2):
-
-            feature_vec = []
-
-            tmp_text1 = ''
-            tmp_text2 = ''
-            if 'address' in dicts:
-                assert self.dict_address is not None, "address entity dictionary is missing..."
-                text1_entitys = self.__get_entitys(text1, self.dict_address)
-                text2_entitys = self.__get_entitys(text2, self.dict_address)
-                feature_vec.append(len(text1_entitys & text2_entitys))
-
-                tmp_text1 = tmp_text1 + self.__rebuild_text(text1, text1_entitys, '@address')
-                tmp_text2 = tmp_text2 + self.__rebuild_text(text2, text2_entitys, '@address')
-
-
-            if 'insurance_name' in dicts:
-                assert self.dict_insurance_name is not None, "insurance_name entity dictionary is missing..."
-                text1_entitys = self.__get_entitys(text1, self.dict_insurance_name)
-                text2_entitys = self.__get_entitys(text2, self.dict_insurance_name)
-                feature_vec.append(len(text1_entitys & text2_entitys))
-
-                tmp_text1 = tmp_text1 + self.__rebuild_text(text1, text1_entitys, '@insurance')
-                tmp_text2 = tmp_text2 + self.__rebuild_text(text2, text2_entitys, '@insurance')
-
-            features.append(feature_vec)
-
-            pattern_texts1.append(tmp_text1)
-            pattern_texts2.append(tmp_text2)
-
-        return np.array(features), pattern_texts1, pattern_texts2
-
-    def __get_entitys(self, sentence, entitys):
-        entitys_set = set()
-        for entity in entitys:
-            if entity in sentence:
-                entitys_set.add(entity)
-        return entitys_set
-
-    def __rebuild_text(self,text, entitys, tag):
-        for entity in entitys:
-            text = text.replace(entity,tag)
-        return text
-
-    def __info_ex(self, sentence, pattens):
-        pattern = ''
-        for p in pattens:
-            if p[1] in sentence:
-                pattern = p[1]
-                break
-        return pattern
-
-    def pattern_sim(self,texts1, texts2):
-        features = []
-        for text1_, text2_ in zip(texts1, texts2):
-            text1_context = self.__info_ex(text1_, self.dict_pattern)
-            text2_context = self.__info_ex(text2_, self.dict_pattern)
-            if (text1_context == text2_context) and text1_context != '':
-                features.append([1])
-            else:
-                features.append([0])
-        return np.array(features)
-
-    chs_arabic_map = {u'零': 0, u'一': 1, u'二': 2, u'三': 3, u'四': 4,
+    CN_NUM_MAP = {u'零': 0, u'一': 1, u'二': 2, u'三': 3, u'四': 4,
                       u'五': 5, u'六': 6, u'七': 7, u'八': 8, u'九': 9,
                       u'十': 10, u'百': 100, u'千': 10 ** 3, u'万': 10 ** 4,
                       u'〇': 0, u'壹': 1, u'贰': 2, u'叁': 3, u'肆': 4,
@@ -120,6 +22,57 @@ class IntentModel(object):
                       u'５': 5, u'６': 6, u'７': 7, u'８': 8, u'９': 9,
                       u'w': 10 ** 4, u'k': 10 ** 3, u'0': 0, u'1': 1, u'2': 2,
                       u'3': 3, u'4': 4, u'5': 5, u'6': 6, u'7': 7, u'8': 8, u'9': 9}
+
+    def __init__(self,dicts=['address','insurance_name']):
+        assert dicts is not None and len(dicts) != 0, "empty dicts"
+
+        self.dict_dir = self.DEFAULT_DICT_PATH
+        self.dict_map = {}
+
+        # level two
+        # self.dict_path_pattern = self.dict_dir + '/fake_pattern.csv'
+        # self.dict_pattern = None
+
+        if os.path.exists(self.dict_dir):
+            logging.info('loading intent dicts...')
+
+            for dict_name in dicts:
+                if os.path.exists(dict_name+'.csv'):
+                    logging.info('loading '+dict_name+' dictionary...')
+                    self.dict_map[dict_name] = self.load_dict(dict_name+'.csv')
+
+    def similarity(self,texts1, texts2):
+        assert len(texts1) == len(texts2) or len(texts1) == 1, "invalid"
+
+        features = []
+
+        for text1, text2 in zip(texts1, texts2):
+
+            feature_vec = []
+
+            for dict_name in self.dict_map.keys():
+                assert self.dict_map[dict_name] is not None, "address entity dictionary is missing..."
+
+                text1_entitys = self.__get_entitys(text1, self.dict_map[dict_name])
+                text2_entitys = self.__get_entitys(text2, self.dict_map[dict_name])
+
+                if len(text1_entitys & text2_entitys) > 0:
+                    feature_vec.append(2) # same entity
+                elif len(text1_entitys | text2_entitys) > 1:
+                    feature_vec.append(1) # same entity type
+                else:
+                    feature_vec.append(0) # others
+
+            features.append(feature_vec)
+
+        return np.array(features)
+
+    def __get_entitys(self, sentence, entitys):
+        entitys_set = set()
+        for entity in entitys:
+            if entity in sentence:
+                entitys_set.add(entity)
+        return entitys_set
 
     def number_sim(self, text1, text2):
         number = re.compile(ur'\d+[wk百万亿]*')
@@ -144,8 +97,15 @@ class IntentModel(object):
             if len(t2_set) != 0:
                 t2_set = set([self.__convertChineseDigitsToArabic(t2) for t2 in t2_set])
 
-            features.append(len(t1_set & t2_set))
+            if len(t1_set & t2_set) > 0:
+                features.append(2)  # same entity
+            elif len(t1_set & t2_set) > 1:
+                features.append(1)  # same entity type
+            else:
+                features.append(0)  # others
+
             result.append(features)
+
         return np.array(result)
 
     def __convertChineseDigitsToArabic(self, chinese_digits, encoding="utf-8"):
@@ -157,7 +117,7 @@ class IntentModel(object):
         hnd_mln = 0
         for count in range(len(chinese_digits)):
             curr_char = chinese_digits[count]
-            curr_digit = self.chs_arabic_map.get(curr_char, None)
+            curr_digit = self.CN_NUM_MAP.get(curr_char, None)
 
             if curr_digit == 10 ** 8:
                 result = result + tmp
@@ -177,6 +137,7 @@ class IntentModel(object):
                 tmp = tmp * 10 + curr_digit
             else:
                 return result
+
         result = result + tmp
         result = result + hnd_mln
         return unicode(str(result), 'utf-8')
