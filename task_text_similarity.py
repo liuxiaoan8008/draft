@@ -25,7 +25,7 @@ from xgboost import XGBClassifier
 MODEL_FILENAME = 'text_similarity_xgboost_model.pkl'
 
 
-def feature_extraction(x1, x2, mode, filepath, dictpath):
+def feature_extraction(x1, x2, mode, filepath):
 
     seg_x1 = []
     for x in x1:
@@ -44,7 +44,7 @@ def feature_extraction(x1, x2, mode, filepath, dictpath):
         feature_extraction.topic_model.build(topic_model_training_data)
 
     if not hasattr(feature_extraction, "entity_model"):
-        feature_extraction.entity_model = EntityModel(dictpath)
+        feature_extraction.entity_model = EntityModel(filepath)
 
     extraction = feature_extraction.topic_model.similarity(seg_x1, seg_x2)
     extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
@@ -52,19 +52,18 @@ def feature_extraction(x1, x2, mode, filepath, dictpath):
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
 
     # get pattern text
-    _,pattern_text1, pattern_text2 = feature_extraction.entity_model.similarity(x1, x2)
-    _, pattern_text1, pattern_text2 = feature_extraction.entity_model.number_sim(pattern_text1, pattern_text2)
+    pattern_text1, pattern_text2 = feature_extraction.entity_model.rebuild_text(x1, x2)
 
-    seg_x1 = []
+    pattern_seg_x1 = []
     for x in pattern_text1:
-        seg_x1.append(jieba.lcut(x))
+        pattern_seg_x1.append(jieba.lcut(x))
 
-    seg_x2 = []
+    pattern_seg_x2 = []
     for x in pattern_text2:
-        seg_x2.append(jieba.lcut(x))
+        pattern_seg_x2.append(jieba.lcut(x))
 
     # add new features
-    extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
+    extraction = np.concatenate((extraction, ngram_similarity(pattern_seg_x1, pattern_seg_x2, 2)), axis=1)
     extraction = np.concatenate((extraction, edit_distance(pattern_text1, pattern_text2)), axis=1)
     extraction = np.concatenate((extraction, lcs(pattern_text1, pattern_text2)), axis=1)
 
@@ -80,7 +79,6 @@ if __name__ == '__main__':
     parser.add_option("-d", "--data", dest="data", metavar="FILE", help="training/testing/candidate data")
     parser.add_option("-f", "--filepath", dest="filepath", metavar="FILE", help="model filepath")
     parser.add_option("-m", "--mode", dest="mode", help="interaction mode: train, test, try")
-    parser.add_option("--dict", "--dictpath", dest="dictpath", help="entity dictionary path")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -117,7 +115,7 @@ if __name__ == '__main__':
                 x2.append(unicode(row[1], 'utf8'))
                 y.append(int(row[2]))
 
-            extraction = feature_extraction(x1, x2, options.mode, options.filepath,options.dictpath)
+            extraction = feature_extraction(x1, x2, options.mode, options.filepath)
             if options.mode == "train":
                 clf = Pipeline([
                     ('preprocess', preprocessing.StandardScaler()),
@@ -145,7 +143,7 @@ if __name__ == '__main__':
                 logging.info("please input a question: ")
                 question = unicode(raw_input(), 'utf8')
 
-                extraction = feature_extraction([question], x, options.mode, options.filepath,options.dictpath)
+                extraction = feature_extraction([question], x, options.mode, options.filepath)
                 clf = joblib.load(options.filepath + '/' + MODEL_FILENAME)
                 y_predict = clf.predict_proba(extraction)
 
