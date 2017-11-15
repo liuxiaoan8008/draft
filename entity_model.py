@@ -29,31 +29,61 @@ class EntityModel(object):
         pattern_texts1 = []
         pattern_texts2 = []
 
-        for text1, text2 in zip(texts1, texts2):
+        if len(texts1) == 1:
             tmp_text1 = ''
-            tmp_text2 = ''
 
             for dict_name in self.dict_map.keys():
                 assert self.dict_map[dict_name] is not None, "address entity dictionary is missing..."
 
-                text1_entitys = self.__get_entitys(text1, self.dict_map[dict_name])
-                text2_entitys = self.__get_entitys(text2, self.dict_map[dict_name])
+                text1_entitys = self.__get_entitys(texts1[0], self.dict_map[dict_name])
+                tmp_text1 = self.__rebuild_text(texts1[0], text1_entitys, '@' + dict_name)
 
-                tmp_text1 = tmp_text1 + self.__rebuild_text(text1, text1_entitys, '@'+dict_name)
-                tmp_text2 = tmp_text2 + self.__rebuild_text(text2, text2_entitys, '@'+dict_name)
+            tmp_text1, _ = self.number_pattern(tmp_text1, '')
+            print tmp_text1
 
-            tmp_text1, tmp_text2 = self.number_pattern(tmp_text1, tmp_text2)
+            for text2 in texts2:
+                for dict_name in self.dict_map.keys():
+                    assert self.dict_map[dict_name] is not None, "address entity dictionary is missing..."
 
-            pattern_texts1.append(tmp_text1)
-            pattern_texts2.append(tmp_text2)
+                    text2_entitys = self.__get_entitys(text2, self.dict_map[dict_name])
+                    text2 = self.__rebuild_text(text2, text2_entitys, '@' + dict_name)
+
+                _, tmp_text2 = self.number_pattern('', text2)
+
+                pattern_texts1.append(tmp_text1)
+                pattern_texts2.append(tmp_text2)
+        else:
+            for text1, text2 in zip(texts1, texts2):
+
+                for dict_name in self.dict_map.keys():
+                    assert self.dict_map[dict_name] is not None, "address entity dictionary is missing..."
+
+                    text1_entitys = self.__get_entitys(text1, self.dict_map[dict_name])
+                    text2_entitys = self.__get_entitys(text2, self.dict_map[dict_name])
+
+                    text1 = self.__rebuild_text(text1, text1_entitys, '@'+dict_name)
+                    text2 = self.__rebuild_text(text2, text2_entitys, '@'+dict_name)
+
+                tmp_text1, tmp_text2 = self.number_pattern(text1, text2)
+
+                pattern_texts1.append(tmp_text1)
+                pattern_texts2.append(tmp_text2)
 
         return pattern_texts1, pattern_texts2
 
     def __get_entitys(self, sentence, entitys):
         entitys_set = set()
-        for entity in entitys:
-            if entity in sentence:
-                entitys_set.add(entity)
+        max_len = len(max(entitys, key=len))
+        min_len = len(min(entitys, key=len))
+
+        grams = set()
+        for n in range(min_len,max_len):
+            grams = set(zip(*[sentence[i:] for i in range(n)])) | grams
+
+        for gram in grams:
+            if gram in entitys:
+                entitys_set.add(entitys)
+
         return entitys_set
 
     def number_pattern(self, text1, text2):
