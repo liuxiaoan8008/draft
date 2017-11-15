@@ -10,7 +10,7 @@ import logging
 from optparse import OptionParser
 
 from string_similarity.topic_model import TopicModel
-from string_similarity.intent_model import IntentModel
+from string_similarity.entity_model import EntityModel
 from string_similarity.util import edit_distance, hamming_distance, ngram_similarity, lcs
 
 import jieba
@@ -44,16 +44,16 @@ def feature_extraction(x1, x2, mode, filepath):
         feature_extraction.topic_model.build(topic_model_training_data)
 
     if not hasattr(feature_extraction, "intent_model"):
-        feature_extraction.intent_model = IntentModel()
+        feature_extraction.entity_model = EntityModel()
 
     extraction = feature_extraction.topic_model.similarity(seg_x1, seg_x2)
     extraction = np.concatenate((extraction, ngram_similarity(seg_x1, seg_x2, 2)), axis=1)
     extraction = np.concatenate((extraction, edit_distance(x1, x2)), axis=1)
     extraction = np.concatenate((extraction, lcs(x1, x2)), axis=1)
 
-    intent_sim = feature_extraction.intent_model.similarity(x1, x2)
+    intent_sim = feature_extraction.entity_model.similarity(x1, x2)
     extraction = np.concatenate((extraction, intent_sim), axis=1)
-    number_sim = feature_extraction.intent_model.number_sim(x1, x2)
+    number_sim = feature_extraction.entity_model.number_sim(x1, x2)
     extraction = np.concatenate((extraction, number_sim), axis=1)
 
     return extraction
