@@ -77,12 +77,12 @@ class EntityModel(object):
         min_len = len(min(entitys, key=len))
 
         grams = set()
-        for n in range(min_len,max_len):
+        for n in range(min_len,max_len+1):
             grams = set(zip(*[sentence[i:] for i in range(n)])) | grams
 
         for gram in grams:
             if gram in entitys:
-                entitys_set.add(entitys)
+                entitys_set.add(gram)
 
         return entitys_set
 
@@ -117,5 +117,5 @@ class EntityModel(object):
         with open(filename) as f:
             lines = f.readlines()
             for line in lines:
-                dict_set.add(unicode(line.strip(), 'utf-8'))
+                dict_set.add(tuple(unicode(line.strip(), 'utf-8')))
         return dict_set
